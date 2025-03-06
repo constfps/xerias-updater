@@ -1,12 +1,9 @@
-﻿using System;
-using System.Net;
-using System.Text.Json;
-using System.Text;
-using System.IO;
+﻿using System.Text.Json;
+using System.IO.Compression;
 
-namespace asdf
+namespace xerias_updater
 {
-    class Program
+    internal class Program
     {
         static void Main(string[] args)
         {
@@ -15,6 +12,15 @@ namespace asdf
 
             //testing field
             DownloadLatest();
+            UncompressFile();
+
+            void UncompressFile()
+            {
+                string zipPath = "text.zip";
+                string extractPath = @".\game";
+
+                ZipFile.ExtractToDirectory(zipPath, extractPath);
+            }
 
             void DownloadLatest()
             {
@@ -30,10 +36,10 @@ namespace asdf
                     //construct request and send
                     var content = new FormUrlEncodedContent(payload);
                     var response = client.PostAsync(endpoint, content).Result;
-                    var rawString = response.Content.ReadAsStringAsync().Result;
-
-                    File.WriteAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "text.zip"), rawString);
-                    Console.WriteLine(rawString);
+                    var rawBytes = response.Content.ReadAsByteArrayAsync().Result;
+                    
+                    //write binary stream to file text.zip
+                    File.WriteAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "text.zip"), rawBytes);
                 }
             }
 
@@ -91,7 +97,6 @@ namespace asdf
                 return temp;
             }
         }
-
         private enum VersionType
         {
             Main,
