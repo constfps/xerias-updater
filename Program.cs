@@ -1,5 +1,7 @@
 ﻿using System.Text.Json;
 using System.IO.Compression;
+using System.Diagnostics;
+using System.Net.Sockets;
 
 namespace xerias_updater
 {
@@ -11,23 +13,54 @@ namespace xerias_updater
             Dictionary<VersionType, int> localVersion = new Dictionary<VersionType, int>();
 
             //testing field
-            DownloadLatest();
-            UncompressFile();
 
-            void UncompressFile()
+            void Log(string message, LogType type)
             {
-                string zipPath = "text.zip";
+
+            }
+
+            bool pingServer(string uri, int portNum)
+            {
+                try
+                {
+                    using (var client = new TcpClient(uri, portNum)) return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            
+            void CleanUp(string zipPath, string gamePath)
+            {
+                File.Delete(zipPath);
+                string gameExe = "";
+
+                var exes = Directory.GetFiles(gamePath, "*.exe");
+                foreach ( var exe in exes )
+                {
+                    if (!exe.Contains("Unity"))
+                    {
+                        gameExe = exe;
+                    }
+                }
+
+                Process.Start(gameExe);
+            }
+
+            void UncompressFile(string zipPath)
+            {
                 string extractPath = @".\game";
 
                 ZipFile.ExtractToDirectory(zipPath, extractPath);
             }
 
-            void DownloadLatest()
+            string DownloadLatest()
             {
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("http://xerias.pw:879");
+                    var endpoint = new Uri("http://174.4.104.176:879");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "latest_build"}
@@ -38,8 +71,10 @@ namespace xerias_updater
                     var response = client.PostAsync(endpoint, content).Result;
                     var rawBytes = response.Content.ReadAsByteArrayAsync().Result;
                     
-                    //write binary stream to file text.zip
-                    File.WriteAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "text.zip"), rawBytes);
+                    //write binary stream to file temp.zip
+                    File.WriteAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp.zip"), rawBytes);
+
+                    return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp.zip");
                 }
             }
 
@@ -54,14 +89,16 @@ namespace xerias_updater
                 return false;
             }
 
-            void GetLocalVersion()
+            bool GetLocalVersion()
             {
                 string versionFileLocation = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "version.json") ;
                 if (File.Exists(versionFileLocation))
                 {
                     string rawJson = File.ReadAllText(versionFileLocation);
                     localVersion = stringVersionParse(rawJson);
+                    return true;
                 }
+                return false;
             }
 
             void GetLatestVersion()
@@ -69,7 +106,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("http://174.4.104.176:879");
+                    var endpoint = new Uri("http://xerias.pw:879");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "version"}
@@ -102,6 +139,14 @@ namespace xerias_updater
             Main,
             Sub,
             Micro
+        }
+
+        private enum LogType
+        {
+            Info,
+            Warning,
+            Error,
+            Process
         }
     }
 }
