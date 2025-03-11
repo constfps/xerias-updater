@@ -2,6 +2,9 @@
 using System.IO.Compression;
 using System.Diagnostics;
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace xerias_updater
 {
@@ -12,39 +15,70 @@ namespace xerias_updater
             Dictionary<VersionType, int> latestVersion = new Dictionary<VersionType, int>();
             Dictionary<VersionType, int> localVersion = new Dictionary<VersionType, int>();
 
-            //testing field
-
-            void Log(string message, LogType type)
+            Serilog.ILogger serilogLogger = new LoggerConfiguration().WriteTo.Console(
+                outputTemplate: "{Timestamp:HH:mm:ss} {Level:u4}: {Message:lj}{Exception}"    
+            ).CreateLogger();
+            Serilog.Log.Logger = serilogLogger;
+            using var loggerFactory = LoggerFactory.Create(builder =>
             {
+                builder.AddSerilog(serilogLogger);
+            });
+            ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
 
-            }
+            //testing field
+            //UncompressFile(DownloadLatest());
+
+            pingServer("174.4.104.176", 890);
 
             bool pingServer(string uri, int portNum)
             {
+                logger.LogInformation("Pinging Server");
                 try
                 {
                     using (var client = new TcpClient(uri, portNum)) return true;
                 }
                 catch
                 {
+                    logger.LogWarning("Ping failed");
                     return false;
                 }
             }
             
             void CleanUp(string zipPath, string gamePath)
             {
-                File.Delete(zipPath);
+                logger.LogInformation("Doing some clean up");
+
+                logger.LogInformation($"Deleting {zipPath}");
+                try
+                {
+                    File.Delete(zipPath);
+                }
+                catch
+                {
+                    logger.LogError("Something went wrong: ");
+                }
+
                 string gameExe = "";
 
+                logger.LogInformation("Trying to find game executable");
                 var exes = Directory.GetFiles(gamePath, "*.exe");
                 foreach ( var exe in exes )
                 {
                     if (!exe.Contains("Unity"))
                     {
+                        logger.LogInformation($"Found {exe}");
                         gameExe = exe;
                     }
                 }
 
+                if (gameExe == "")
+                {
+                    logger.LogError("Couldn't find game executable. Exiting");
+                    Thread.Sleep(5000);
+                    Environment.Exit(0);
+                }
+
+                logger.LogInformation($"Starting {gameExe}");
                 Process.Start(gameExe);
             }
 
@@ -139,14 +173,6 @@ namespace xerias_updater
             Main,
             Sub,
             Micro
-        }
-
-        private enum LogType
-        {
-            Info,
-            Warning,
-            Error,
-            Process
         }
     }
 }
