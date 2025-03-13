@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using Serilog;
-using Serilog.Extensions.Logging;
 
 namespace xerias_updater
 {
@@ -15,8 +14,9 @@ namespace xerias_updater
             Dictionary<VersionType, int> latestVersion = new Dictionary<VersionType, int>();
             Dictionary<VersionType, int> localVersion = new Dictionary<VersionType, int>();
 
+            //initialize logger
             Serilog.ILogger serilogLogger = new LoggerConfiguration().WriteTo.Console(
-                outputTemplate: "{Timestamp:HH:mm:ss} {Level:u4}: {Message:lj}{Exception}"    
+                outputTemplate: "{Timestamp:HH:mm:ss} {Level:u4}: {Message:lj}{Exception}{NewLine}"    
             ).CreateLogger();
             Serilog.Log.Logger = serilogLogger;
             using var loggerFactory = LoggerFactory.Create(builder =>
@@ -25,10 +25,33 @@ namespace xerias_updater
             });
             ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
 
-            //testing field
-            //UncompressFile(DownloadLatest());
+            /*
+            if (pingServer("174.4.104.176", 879))
+            {
+                logger.LogInformation("Ping successful");
 
-            pingServer("174.4.104.176", 890);
+                if (GetLocalVersion())
+                {
+                     
+                }
+                else
+                {
+                    var zipPath = DownloadLatest();
+                    var extractPath = UncompressFile(zipPath);
+                    CleanUp(zipPath, extractPath);
+                }
+            }
+            */
+
+            void WriteVersionFile(Dictionary<VersionType, int> ver)
+            {
+                Dictionary<string, string> temp = new Dictionary<string, string>();
+                temp.Add("main", ver[VersionType.Main].ToString());
+                temp.Add("sub", ver[VersionType.Sub].ToString());
+                temp.Add("micro", ver[VersionType.Micro].ToString());
+
+                File.AppendAllText(@".\version.json", JsonSerializer.Serialize(temp));
+            }
 
             bool pingServer(string uri, int portNum)
             {
@@ -55,7 +78,9 @@ namespace xerias_updater
                 }
                 catch
                 {
-                    logger.LogError("Something went wrong: ");
+                    logger.LogError("Something went wrong :(");
+                    Thread.Sleep(5000);
+                    Environment.Exit(0);
                 }
 
                 string gameExe = "";
@@ -82,11 +107,24 @@ namespace xerias_updater
                 Process.Start(gameExe);
             }
 
-            void UncompressFile(string zipPath)
+            string UncompressFile(string zipPath)
             {
                 string extractPath = @".\game";
 
-                ZipFile.ExtractToDirectory(zipPath, extractPath);
+                logger.LogInformation($" Extracting {zipPath} to {extractPath}");
+
+                try
+                {
+                    ZipFile.ExtractToDirectory(zipPath, extractPath);
+                }
+                catch
+                {
+                    logger.LogError($"Something went wrong :(");
+                    Thread.Sleep(5000);
+                    Environment.Exit(0);
+                }
+
+                return extractPath;
             }
 
             string DownloadLatest()
@@ -103,10 +141,18 @@ namespace xerias_updater
                     //construct request and send
                     var content = new FormUrlEncodedContent(payload);
                     var response = client.PostAsync(endpoint, content).Result;
-                    var rawBytes = response.Content.ReadAsByteArrayAsync().Result;
-                    
-                    //write binary stream to file temp.zip
-                    File.WriteAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp.zip"), rawBytes);
+                    try
+                    {
+                        logger.LogInformation("Downloading files to temp.zip");
+                        var rawBytes = response.Content.ReadAsByteArrayAsync().Result;
+                        File.WriteAllBytes(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp.zip"), rawBytes);
+                    }
+                    catch
+                    {
+                        logger.LogError("Something went wrong :(");
+                        Thread.Sleep(5000);
+                        Environment.Exit(0);
+                    }
 
                     return Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "temp.zip");
                 }
@@ -126,12 +172,16 @@ namespace xerias_updater
             bool GetLocalVersion()
             {
                 string versionFileLocation = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "version.json") ;
+                logger.LogInformation($"Trying to find {versionFileLocation}");
                 if (File.Exists(versionFileLocation))
                 {
+                    logger.LogInformation($"Found {versionFileLocation}. Now reading it");
                     string rawJson = File.ReadAllText(versionFileLocation);
                     localVersion = stringVersionParse(rawJson);
                     return true;
                 }
+
+                logger.LogWarning($"Couldn't find {versionFileLocation}. Proceeding with first time install");
                 return false;
             }
 
@@ -140,7 +190,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("http://xerias.pw:879");
+                    var endpoint = new Uri("http://174.4.104.176:879");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "version"}
@@ -148,11 +198,23 @@ namespace xerias_updater
 
                     //construct request and send
                     var content = new FormUrlEncodedContent(payload);
-                    var response = client.PostAsync(endpoint, content).Result;
 
-                    //parse raw string to proper dict
-                    var rawString = response.Content.ReadAsStringAsync().Result;
-                    latestVersion = stringVersionParse(rawString);
+                    try
+                    {
+                        logger.LogInformation("Requesting latest version");
+                        var response = client.PostAsync(endpoint, content).Result;
+                        //parse raw string to proper dict
+                        logger.LogInformation("Response receieved. Parsing");
+                        var rawString = response.Content.ReadAsStringAsync().Result;
+                        latestVersion = stringVersionParse(rawString);
+                    }
+                    catch
+                    {
+                        logger.LogError("Something went wrong with the request");
+                        Thread.Sleep(5000);
+                        Environment.Exit(0);
+                    }
+
                 }
             }
 
