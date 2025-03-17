@@ -25,23 +25,33 @@ namespace xerias_updater
             });
             ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
 
-            /*
-            if (pingServer("174.4.104.176", 879))
+            if (pingServer("server.xerias.pw", 879))
             {
                 logger.LogInformation("Ping successful");
+                GetLatestVersion();
 
                 if (GetLocalVersion())
                 {
-                     
+                    if (CompareVersions(latestVersion, localVersion) && Directory.Exists(@".\game"))
+                    {
+                        launchGame(@"game");
+                    }
+                    else
+                    {
+                        var zipPath = DownloadLatest();
+                        var gamePath = UncompressFile(zipPath);
+                        CleanUp(zipPath, gamePath);
+                        launchGame(gamePath);
+                    }
                 }
                 else
                 {
                     var zipPath = DownloadLatest();
                     var extractPath = UncompressFile(zipPath);
                     CleanUp(zipPath, extractPath);
+                    launchGame($"{extractPath}");
                 }
             }
-            */
 
             void WriteVersionFile(Dictionary<VersionType, int> ver)
             {
@@ -50,7 +60,10 @@ namespace xerias_updater
                 temp.Add("sub", ver[VersionType.Sub].ToString());
                 temp.Add("micro", ver[VersionType.Micro].ToString());
 
-                File.AppendAllText(@".\version.json", JsonSerializer.Serialize(temp));
+                logger.LogInformation("Writing latest version to version.json");
+                string versionFileLocation = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "version.json") ;
+
+                File.WriteAllText(versionFileLocation, JsonSerializer.Serialize(temp));
             }
 
             bool pingServer(string uri, int portNum)
@@ -65,6 +78,32 @@ namespace xerias_updater
                     logger.LogWarning("Ping failed");
                     return false;
                 }
+            }
+            
+            void launchGame(string gamePath)
+            {
+                string gameExe = "";
+
+                logger.LogInformation("Trying to find game executable");
+                var exes = Directory.GetFiles(gamePath, "*.exe");
+                foreach ( var exe in exes )
+                {
+                    if (!exe.Contains("Unity"))
+                    {
+                        logger.LogInformation($"Found {exe}");
+                        gameExe = exe;
+                    }
+                }
+
+                if (gameExe == "")
+                {
+                    logger.LogError("Couldn't find game executable. Please delete the game folder and relaunch");
+                    Thread.Sleep(5000);
+                    Environment.Exit(0);
+                }
+
+                logger.LogInformation($"Starting {gameExe}");
+                Process.Start(gameExe);
             }
             
             void CleanUp(string zipPath, string gamePath)
@@ -82,29 +121,7 @@ namespace xerias_updater
                     Thread.Sleep(5000);
                     Environment.Exit(0);
                 }
-
-                string gameExe = "";
-
-                logger.LogInformation("Trying to find game executable");
-                var exes = Directory.GetFiles(gamePath, "*.exe");
-                foreach ( var exe in exes )
-                {
-                    if (!exe.Contains("Unity"))
-                    {
-                        logger.LogInformation($"Found {exe}");
-                        gameExe = exe;
-                    }
-                }
-
-                if (gameExe == "")
-                {
-                    logger.LogError("Couldn't find game executable. Exiting");
-                    Thread.Sleep(5000);
-                    Environment.Exit(0);
-                }
-
-                logger.LogInformation($"Starting {gameExe}");
-                Process.Start(gameExe);
+                WriteVersionFile(latestVersion);
             }
 
             string UncompressFile(string zipPath)
@@ -132,7 +149,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("http://174.4.104.176:879");
+                    var endpoint = new Uri("https://server.xerias.pw:879");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "latest_build"}
@@ -164,8 +181,11 @@ namespace xerias_updater
                     version1[VersionType.Sub] == version2[VersionType.Sub] &&
                     version1[VersionType.Micro] == version2[VersionType.Micro])
                 {
+                    logger.LogInformation("Local version is the same as latest version");
                     return true;
                 }
+
+                logger.LogInformation("Local version is different as latest version");
                 return false;
             }
 
@@ -190,7 +210,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("http://174.4.104.176:879");
+                    var endpoint = new Uri("https://server.xerias.pw:879");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "version"}
