@@ -149,7 +149,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("https://server.xerias.pw:879");
+                    var endpoint = new Uri("https://server.xerias.pw:879/api");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "latest_build"}
@@ -210,7 +210,7 @@ namespace xerias_updater
                 using (var client = new HttpClient())
                 {
                     //set endpoint and payload
-                    var endpoint = new Uri("https://server.xerias.pw:879");
+                    var endpoint = new Uri("https://server.xerias.pw:879/api");
                     var payload = new Dictionary<string, string>
                     {
                         {"query", "version"}
